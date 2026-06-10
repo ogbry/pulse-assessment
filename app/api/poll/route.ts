@@ -21,9 +21,10 @@ export async function GET(request: NextRequest) {
   const staleCutoff = new Date(now - STALE_MS);
   const signalCutoff = new Date(now - SIGNAL_TTL_MS);
 
-  // 1) Heartbeat — refresh lastSeen for the caller.
+  // 1) Heartbeat — refresh lastSeen for the caller ONLY. (Refreshing every row
+  // would keep departed users "alive" forever, so stale reaping never fires.)
   await prisma.presence.updateMany({
-    where: {},
+    where: { id },
     data: { lastSeen: new Date(now) },
   });
 
