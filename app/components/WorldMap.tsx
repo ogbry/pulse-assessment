@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { Map as MapboxMap, Marker, Popup } from "mapbox-gl";
-import type { PeerDot } from "@/lib/types";
+import type { PeerDot, RippleEvent } from "@/lib/types";
 import { haversineKm, formatDistance } from "@/lib/geo";
 
 const TOKEN =
@@ -61,6 +61,56 @@ function geodesic(
   return pts;
 }
 
+// A brief violet arc that flashes (rises then fades) across the globe when a
+// connection ripples in. Self-cleaning; guarded so a torn-down map never throws.
+function spawnArc(map: MapboxMap, a: [number, number], b: [number, number]) {
+  const id = `arc-${Math.random().toString(36).slice(2)}`;
+  const data = {
+    type: "Feature" as const,
+    properties: {},
+    geometry: { type: "LineString" as const, coordinates: geodesic(a, b) },
+  };
+  try {
+    map.addSource(id, { type: "geojson", data });
+    map.addLayer({
+      id,
+      type: "line",
+      source: id,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#b07bff",
+        "line-width": 1.5,
+        "line-opacity": 0,
+        "line-blur": 2,
+      },
+    });
+  } catch {
+    return;
+  }
+  const start = performance.now();
+  const dur = 1800;
+  const tick = (t: number) => {
+    const k = Math.min(1, (t - start) / dur);
+    try {
+      if (!map.getLayer(id)) return;
+      map.setPaintProperty(id, "line-opacity", Math.sin(k * Math.PI) * 0.55);
+    } catch {
+      return;
+    }
+    if (k < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      try {
+        if (map.getLayer(id)) map.removeLayer(id);
+        if (map.getSource(id)) map.removeSource(id);
+      } catch {
+        /* map gone */
+      }
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
 // Stepped dash patterns → a bright pulse that travels along the beam.
 const DASH_SEQUENCE = [
   [0, 4, 3],
@@ -85,12 +135,14 @@ export default function WorldMap({
   onPeerClick,
   canConnect,
   activePeerId,
+  rippleBatch,
 }: {
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
   onPeerClick: (id: string) => void;
   canConnect: boolean;
   activePeerId: string | null;
+  rippleBatch: RippleEvent[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -344,6 +396,39 @@ export default function WorldMap({
 
     return removeBeam;
   }, [activePeerId, peers, me, ready]);
+
+  // ── Global Ripples — ambient liveness bursts broadcast from everyone ───────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || rippleBatch.length === 0) return;
+    let cancelled = false;
+
+    (async () => {
+      const mapboxgl = (await import("mapbox-gl")).default;
+      if (cancelled || !mapRef.current) return;
+
+      const burst = (lng: number, lat: number, kind: string) => {
+        const el = document.createElement("div");
+        el.className = `ripple-burst ripple-${kind}`;
+        const m = new mapboxgl.Marker({ element: el })
+          .setLngLat([lng, lat])
+          .addTo(map);
+        window.setTimeout(() => m.remove(), 2600);
+      };
+
+      for (const r of rippleBatch) {
+        burst(r.lng, r.lat, r.kind);
+        if (r.kind === "connect" && r.lat2 != null && r.lng2 != null) {
+          burst(r.lng2, r.lat2, "connect");
+          spawnArc(map, [r.lng, r.lat], [r.lng2, r.lat2]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rippleBatch, ready]);
 
   return (
     <div className="absolute inset-0">

@@ -9,8 +9,22 @@ import VideoPanel from "./components/VideoPanel";
 import { join, leave, poll, sendSignal } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
-import { type PeerDot, type SignalMsg } from "@/lib/types";
+import { type PeerDot, type SignalMsg, type RippleEvent } from "@/lib/types";
 import { haversineKm, formatDistance } from "@/lib/geo";
+
+// One-line caption for the live activity ticker.
+function rippleText(r: RippleEvent): string {
+  if (r.kind === "join") return "a soul tuned in";
+  if (r.lat2 != null && r.lng2 != null) {
+    const km = haversineKm(r.lat, r.lng, r.lat2, r.lng2);
+    const apart =
+      km < 1
+        ? "moments apart"
+        : `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString()} km apart`;
+    return `two souls connected · ${apart}`;
+  }
+  return "two souls connected";
+}
 
 type Conn =
   | { kind: "idle" }
@@ -39,6 +53,12 @@ export default function Home() {
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
+
+  // Phase 4 — Global Ripples: the latest batch of unseen ambient events fed to
+  // the map, plus a short-lived activity ticker.
+  const [rippleBatch, setRippleBatch] = useState<RippleEvent[]>([]);
+  const seenRipples = useRef<Set<string>>(new Set());
+  const [activity, setActivity] = useState<{ id: string; text: string }[]>([]);
 
   const [conn, _setConn] = useState<Conn>({ kind: "idle" });
   const connRef = useRef<Conn>(conn);
@@ -287,6 +307,29 @@ export default function Home() {
         if (!active) return;
         setPeers(data.peers);
         for (const s of data.signals) processSignalRef.current(s);
+
+        // Global Ripples: animate only events we haven't seen before.
+        const fresh = (data.ripples ?? []).filter(
+          (r) => !seenRipples.current.has(r.id),
+        );
+        if (fresh.length > 0) {
+          for (const r of fresh) seenRipples.current.add(r.id);
+          if (seenRipples.current.size > 300) {
+            seenRipples.current = new Set(fresh.map((r) => r.id));
+          }
+          setRippleBatch(fresh);
+          setActivity((prev) =>
+            [...fresh.map((r) => ({ id: r.id, text: rippleText(r) })), ...prev].slice(
+              0,
+              5,
+            ),
+          );
+          for (const r of fresh) {
+            window.setTimeout(() => {
+              if (active) setActivity((prev) => prev.filter((a) => a.id !== r.id));
+            }, 6000);
+          }
+        }
       } catch {}
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
     };
@@ -377,6 +420,7 @@ export default function Home() {
         onPeerClick={requestConnection}
         canConnect={conn.kind === "idle"}
         activePeerId={activePeerId}
+        rippleBatch={rippleBatch}
       />
 
       {/* HUD */}
@@ -392,6 +436,21 @@ export default function Home() {
           {peers.length === 1 ? "soul" : "souls"} online
         </div>
       </div>
+
+      {/* Live activity ticker — Global Ripples */}
+      {activity.length > 0 && (
+        <div className="pointer-events-none absolute bottom-5 left-4 z-30 flex max-w-xs flex-col gap-1.5">
+          {activity.map((a) => (
+            <div
+              key={a.id}
+              className="ticker-item glass mono flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] text-ink-dim"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_var(--cyan)]" />
+              {a.text}
+            </div>
+          ))}
+        </div>
+      )}
 
       {notice && (
         <div className="glass-strong mono fade-in absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full px-4 py-2 text-sm text-ink shadow-lg">

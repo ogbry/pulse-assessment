@@ -150,6 +150,63 @@ body {
   }
 }
 
+/* ── Global Ripples — ambient liveness bursts ────────────────────────────── */
+.ripple-burst {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 2px solid var(--cyan);
+  pointer-events: none;
+  box-shadow: 0 0 12px 1px color-mix(in srgb, var(--cyan) 60%, transparent);
+  animation: ripple-burst 2.5s cubic-bezier(0.16, 0.8, 0.3, 1) forwards;
+}
+.ripple-join {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px 1px color-mix(in srgb, var(--cyan) 55%, transparent);
+}
+.ripple-connect {
+  width: 16px;
+  height: 16px;
+  border-color: var(--violet);
+  box-shadow: 0 0 16px 2px color-mix(in srgb, var(--violet) 60%, transparent);
+}
+@keyframes ripple-burst {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(10);
+    opacity: 0;
+  }
+}
+
+/* Live activity ticker entries (fade in, hold, fade out over their lifetime). */
+.ticker-item {
+  animation: ticker-life 6s ease both;
+}
+@keyframes ticker-life {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  7% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+}
+
 /* The user's own position — a calm beacon, not a sonar source. */
 .pulse-me {
   position: relative;
