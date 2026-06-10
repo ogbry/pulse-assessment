@@ -93,6 +93,27 @@ export async function POST(request: NextRequest) {
       where: { id: { in: [fromId, toId] } },
       data: { busy: true },
     });
+    // A connection just formed — ripple it across every globe, anchored at both
+    // strangers' (already offset) positions. Best-effort, anonymous.
+    try {
+      const ends = await prisma.presence.findMany({
+        where: { id: { in: [fromId, toId] } },
+        select: { lat: true, lng: true },
+      });
+      if (ends.length === 2) {
+        await prisma.ripple.create({
+          data: {
+            kind: "connect",
+            lat: ends[0].lat,
+            lng: ends[0].lng,
+            lat2: ends[1].lat,
+            lng2: ends[1].lng,
+          },
+        });
+      }
+    } catch {
+      /* ambient nicety — ignore */
+    }
   } else if (signalType === "decline" || signalType === "end") {
     await prisma.presence.updateMany({
       where: { id: { in: [fromId, toId] } },

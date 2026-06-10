@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { STALE_MS, SIGNAL_TTL_MS } from "@/lib/presence";
+import {
+  STALE_MS,
+  SIGNAL_TTL_MS,
+  RIPPLE_WINDOW_MS,
+  RIPPLE_TTL_MS,
+} from "@/lib/presence";
 import type { PollResponse } from "@/lib/types";
 import { isValidSessionId, secretMatches } from "@/lib/auth";
 
@@ -47,9 +52,12 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // 2) Reap stale presence rows and orphaned signals.
+  // 2) Reap stale presence rows, orphaned signals, and expired ripples.
   await prisma.presence.deleteMany({ where: { lastSeen: { lt: staleCutoff } } });
   await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
+  await prisma.ripple.deleteMany({
+    where: { createdAt: { lt: new Date(now - RIPPLE_TTL_MS) } },
+  });
 
   // 3) Online peers, excluding self.
   const peers = await prisma.presence.findMany({
@@ -71,8 +79,24 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Ambient liveness — recent ripples broadcast to everyone (public, anonymous).
+  const ripples = await prisma.ripple.findMany({
+    where: { createdAt: { gte: new Date(now - RIPPLE_WINDOW_MS) } },
+    orderBy: { createdAt: "asc" },
+    take: 40,
+  });
+
   const response: PollResponse = {
     peers: peers.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, busy: p.busy })),
+    ripples: ripples.map((r) => ({
+      id: r.id,
+      kind: r.kind as PollResponse["ripples"][number]["kind"],
+      lat: r.lat,
+      lng: r.lng,
+      lat2: r.lat2,
+      lng2: r.lng2,
+      createdAt: r.createdAt.toISOString(),
+    })),
     signals: inbox.map((s) => ({
       id: s.id,
       fromId: s.fromId,

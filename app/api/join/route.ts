@@ -59,5 +59,17 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  // Broadcast an arrival ripple to everyone's globe (only for genuinely new
+  // sessions, not heartbeat re-joins). Best-effort — never fail a join over it.
+  if (!existing) {
+    try {
+      await prisma.ripple.create({
+        data: { kind: "join", lat: offset.lat, lng: offset.lng },
+      });
+    } catch {
+      /* ambient nicety — ignore */
+    }
+  }
+
   return Response.json({ ok: true });
 }
