@@ -2,18 +2,23 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { STALE_MS, SIGNAL_TTL_MS } from "@/lib/presence";
 import type { PollResponse } from "@/lib/types";
+import { isValidSessionId, secretMatches } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/poll?id= — the single endpoint that drives the live map.
-// It (1) heartbeats the caller, (2) reaps stale presence + orphan signals,
-// (3) returns the filtered online peers, and (4) drains this user's mailbox.
+// GET /api/poll?id=  (secret via `x-pulse-secret` header)
+// Drives the live map: (1) heartbeats + drains the mailbox of an AUTHENTICATED
+// caller, (2) reaps stale presence + orphan signals, (3) returns online peers.
+//
+// A caller with no/invalid secret (e.g. the entry-screen "souls online" probe)
+// still gets the public peer list, but never a heartbeat or a mailbox drain —
+// so no one can drain a victim's inbox just by knowing their (public) id.
 export async function GET(request: NextRequest) {
-  const params = request.nextUrl.searchParams;
-  const id = params.get("id");
+  const id = request.nextUrl.searchParams.get("id");
+  const secret = request.headers.get("x-pulse-secret");
 
-  if (!id) {
+  if (!isValidSessionId(id)) {
     return Response.json({ error: "missing id" }, { status: 400 });
   }
 
@@ -21,46 +26,53 @@ export async function GET(request: NextRequest) {
   const staleCutoff = new Date(now - STALE_MS);
   const signalCutoff = new Date(now - SIGNAL_TTL_MS);
 
-  // 1) Heartbeat — refresh lastSeen for the caller ONLY. (Refreshing every row
-  // would keep departed users "alive" forever, so stale reaping never fires.)
-  await prisma.presence.updateMany({
+  // Authenticate the caller against their own presence row (if any).
+  const self = await prisma.presence.findUnique({
     where: { id },
-    data: { lastSeen: new Date(now) },
+    select: { secretHash: true },
   });
+  const authed = !!self && !!secret && secretMatches(secret, self.secretHash);
 
-  // 2) Reap stale presence rows and orphaned signals (independent deletes —
-  // no atomicity needed, and avoids transactions over a PgBouncer pooler).
+  // If a presence row exists but the secret is wrong/absent, refuse — don't let
+  // a poll masquerade as someone else.
+  if (self && !authed) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // 1) Heartbeat — only for the authenticated owner of an existing row.
+  if (authed) {
+    await prisma.presence.updateMany({
+      where: { id },
+      data: { lastSeen: new Date(now) },
+    });
+  }
+
+  // 2) Reap stale presence rows and orphaned signals.
   await prisma.presence.deleteMany({ where: { lastSeen: { lt: staleCutoff } } });
   await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
 
   // 3) Online peers, excluding self.
   const peers = await prisma.presence.findMany({
-    where: {
-      id: { not: id },
-      lastSeen: { gte: staleCutoff },
-    },
+    where: { id: { not: id }, lastSeen: { gte: staleCutoff } },
     select: { id: true, lat: true, lng: true, busy: true },
   });
 
-  // 4) Drain this user's mailbox: read, then delete exactly what we read so a
-  // concurrently-inserted signal is never lost.
-  const inbox = await prisma.signal.findMany({
-    where: { toId: id },
-    orderBy: { createdAt: "asc" },
-  });
-  if (inbox.length > 0) {
-    await prisma.signal.deleteMany({
-      where: { id: { in: inbox.map((s) => s.id) } },
+  // 4) Drain the mailbox — only for the authenticated owner.
+  let inbox: Awaited<ReturnType<typeof prisma.signal.findMany>> = [];
+  if (authed) {
+    inbox = await prisma.signal.findMany({
+      where: { toId: id },
+      orderBy: { createdAt: "asc" },
     });
+    if (inbox.length > 0) {
+      await prisma.signal.deleteMany({
+        where: { id: { in: inbox.map((s) => s.id) } },
+      });
+    }
   }
 
   const response: PollResponse = {
-    peers: peers.map((p) => ({
-      id: p.id,
-      lat: p.lat,
-      lng: p.lng,
-      busy: p.busy,
-    })),
+    peers: peers.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, busy: p.busy })),
     signals: inbox.map((s) => ({
       id: s.id,
       fromId: s.fromId,
