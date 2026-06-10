@@ -25,6 +25,22 @@ model Presence {
   @@index([lastSeen])
 }
 
+model Ripple {
+  // Ambient "the world is alive" events, broadcast to every client through the
+  // poll channel and reaped after a few seconds. Coordinates are the SAME
+  // privacy-offset values used for dots (never raw location); no session ids are
+  // stored, so a ripple is anonymous and reveals nothing a dot doesn't already.
+  id        String   @id @default(uuid())
+  kind      String // "join" | "connect"
+  lat       Float
+  lng       Float
+  lat2      Float? // second endpoint (for "connect")
+  lng2      Float?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model Signal {
   // Mailbox for connection requests + WebRTC signaling only.
   id        String   @id @default(uuid())

@@ -26,7 +26,21 @@ export interface SignalMsg {
   createdAt: string;
 }
 
+// Ambient liveness events broadcast to every client (Phase 4 — Global Ripples).
+export type RippleKind = "join" | "connect";
+
+export interface RippleEvent {
+  id: string;
+  kind: RippleKind;
+  lat: number;
+  lng: number;
+  lat2: number | null;
+  lng2: number | null;
+  createdAt: string;
+}
+
 export interface PollResponse {
   peers: PeerDot[];
   signals: SignalMsg[];
+  ripples: RippleEvent[];
 }
