@@ -10,6 +10,7 @@ import { join, leave, poll, sendSignal } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
+import { haversineKm, formatDistance } from "@/lib/geo";
 
 type Conn =
   | { kind: "idle" }
@@ -334,27 +335,69 @@ export default function Home() {
 
   const inChat = conn.kind === "connecting" || conn.kind === "connected";
 
+  // The peer we're currently engaged with (drives the connection beam + chat
+  // distance readout).
+  const activePeerId =
+    conn.kind === "requesting" ||
+    conn.kind === "incoming" ||
+    conn.kind === "connecting" ||
+    conn.kind === "connected"
+      ? conn.peerId
+      : null;
+  const activePeer = activePeerId
+    ? peers.find((p) => p.id === activePeerId)
+    : undefined;
+  const distanceLabel =
+    myLocation && activePeer
+      ? formatDistance(
+          haversineKm(
+            myLocation.lat,
+            myLocation.lng,
+            activePeer.lat,
+            activePeer.lng,
+          ),
+        )
+      : null;
+
   return (
-    <main className="fixed inset-0 overflow-hidden">
+    <main className="fixed inset-0 overflow-hidden text-ink">
       <WorldMap
         peers={peers}
         me={myLocation}
         onPeerClick={requestConnection}
         canConnect={conn.kind === "idle"}
+        activePeerId={activePeerId}
       />
 
+      {/* HUD */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between p-4">
+        <div className="glass mono flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs">
+          <span className="font-semibold tracking-[0.28em] text-cyan">
+            PULSE
+          </span>
+        </div>
+        <div className="glass mono flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-ink-dim">
+          <span className="live-dot" />
+          <span className="text-cyan">{peers.length}</span>{" "}
+          {peers.length === 1 ? "soul" : "souls"} online
+        </div>
+      </div>
+
       {notice && (
-        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="glass-strong mono fade-in absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full px-4 py-2 text-sm text-ink shadow-lg">
           {notice}
         </div>
       )}
 
       {conn.kind === "requesting" && (
-        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
-          <span>Requesting connection…</span>
+        <div className="glass-strong fade-in absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full px-4 py-2 text-sm text-ink shadow-lg">
+          <span className="flex items-center gap-2">
+            <span className="live-dot" />
+            Pinging stranger…
+          </span>
           <button
             onClick={cancelRequest}
-            className="rounded-full bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600"
+            className="btn-ghost px-3 py-1 text-xs"
           >
             Cancel
           </button>
@@ -376,6 +419,7 @@ export default function Home() {
           messages={messages}
           connected={conn.kind === "connected"}
           videoBusy={video !== "none"}
+          distanceLabel={distanceLabel}
           onSend={(text) => {
             peerRef.current?.sendChat(text);
             addMessage(true, text);
@@ -386,7 +430,8 @@ export default function Home() {
       )}
 
       {video === "requesting" && (
-        <div className="absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="glass-strong mono fade-in absolute bottom-24 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full px-4 py-2 text-sm text-ink shadow-lg">
+          <span className="live-dot" />
           Waiting for stranger to accept video…
         </div>
       )}

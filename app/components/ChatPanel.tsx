@@ -12,6 +12,7 @@ export default function ChatPanel({
   messages,
   connected,
   videoBusy,
+  distanceLabel,
   onSend,
   onStartVideo,
   onEnd,
@@ -19,6 +20,7 @@ export default function ChatPanel({
   messages: ChatMessage[];
   connected: boolean;
   videoBusy: boolean;
+  distanceLabel?: string | null;
   onSend: (text: string) => void;
   onStartVideo: () => void;
   onEnd: () => void;
@@ -39,47 +41,59 @@ export default function ChatPanel({
   }
 
   return (
-    <div className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl">
-      <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <div>
-          <p className="font-semibold">Stranger</p>
-          <p className="text-xs text-zinc-500">
-            {connected ? "Connected" : "Connecting…"}
+    <div className="glass-strong absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col rounded-l-2xl text-ink rise">
+      {/* Transmission header */}
+      <header className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-semibold tracking-tight">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                connected
+                  ? "bg-cyan shadow-[0_0_8px_var(--cyan)]"
+                  : "bg-[var(--amber)] animate-pulse"
+              }`}
+            />
+            Stranger
+          </p>
+          <p className="mono mt-1 truncate text-[10px] uppercase tracking-[0.18em] text-ink-dim">
+            {connected ? "secure link" : "establishing link…"}
+            {connected && distanceLabel ? ` · ${distanceLabel}` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <button
             onClick={onStartVideo}
             disabled={!connected || videoBusy}
-            className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm hover:border-zinc-500 disabled:opacity-40"
+            className="btn-ghost px-3.5 py-1.5 text-sm"
           >
             Video
           </button>
-          <button
-            onClick={onEnd}
-            className="rounded-full bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400"
-          >
+          <button onClick={onEnd} className="btn-danger px-3.5 py-1.5 text-sm">
             End
           </button>
         </div>
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-4">
+      {/* Messages */}
+      <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
         {messages.length === 0 && (
-          <p className="mt-8 text-center text-sm text-zinc-500">
-            Say hello. Messages are peer-to-peer and never stored.
-          </p>
+          <div className="mt-10 text-center">
+            <p className="text-sm text-ink-dim">Say hello.</p>
+            <p className="mono mt-2 text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+              peer-to-peer · never stored
+            </p>
+          </div>
         )}
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`flex ${m.mine ? "justify-end" : "justify-start"}`}
+            className={`msg-in flex ${m.mine ? "justify-end" : "justify-start"}`}
           >
             <span
-              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+              className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${
                 m.mine
-                  ? "bg-emerald-400 text-zinc-950"
-                  : "bg-zinc-800 text-zinc-100"
+                  ? "rounded-br-md bg-gradient-to-br from-cyan to-[var(--cyan-deep)] text-[#04121a]"
+                  : "rounded-bl-md border border-[var(--hairline)] bg-white/[0.04] text-ink"
               }`}
             >
               {m.text}
@@ -89,18 +103,22 @@ export default function ChatPanel({
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={submit} className="flex gap-2 border-t border-zinc-800 p-3">
+      {/* Composer */}
+      <form
+        onSubmit={submit}
+        className="flex gap-2 border-t border-[var(--hairline)] p-4"
+      >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={connected ? "Type a message…" : "Connecting…"}
           disabled={!connected}
-          className="flex-1 rounded-full bg-zinc-900 px-4 py-2 text-sm outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+          className="mono flex-1 rounded-full border border-[var(--hairline)] bg-black/30 px-4 py-2.5 text-sm text-ink outline-none transition placeholder:text-ink-faint focus:border-[var(--cyan)] focus:ring-1 focus:ring-[var(--cyan)] disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={!connected || !draft.trim()}
-          className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40"
+          className="btn-signal px-5 py-2.5 text-sm"
         >
           Send
         </button>
