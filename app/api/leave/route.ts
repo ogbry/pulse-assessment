@@ -22,9 +22,12 @@ export async function POST(request: NextRequest) {
 
   // Independent cleanup deletes — no atomicity needed (and interactive
   // transactions are unreliable over a PgBouncer pooler).
-  await prisma.signal.deleteMany({
-    where: { OR: [{ toId: id }, { fromId: id }] },
-  });
+  //
+  // Only drain OUR inbox (toId == me). We deliberately do NOT delete signals we
+  // *sent* (fromId == me): on tab close we fire a final "end" to our peer, and
+  // deleting outgoing signals here would race-delete it before the peer polls.
+  // Any genuinely orphaned outgoing signals are reaped by SIGNAL_TTL_MS.
+  await prisma.signal.deleteMany({ where: { toId: id } });
   await prisma.presence.deleteMany({ where: { id } });
 
   return Response.json({ ok: true });

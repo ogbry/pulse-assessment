@@ -294,7 +294,26 @@ export default function Home() {
 
   useEffect(() => {
     if (!sessionId || phase !== "live") return;
-    const onLeave = () => leave(sessionId);
+    const onLeave = () => {
+      // Tell any active/pending peer we're gone so their chat ends immediately,
+      // instead of waiting for WebRTC to slowly time out. sendBeacon survives
+      // the tab closing.
+      const c = connRef.current;
+      const peerId =
+        c.kind === "requesting" ||
+        c.kind === "incoming" ||
+        c.kind === "connecting" ||
+        c.kind === "connected"
+          ? c.peerId
+          : null;
+      if (peerId && typeof navigator !== "undefined" && navigator.sendBeacon) {
+        navigator.sendBeacon(
+          "/api/signal",
+          JSON.stringify({ fromId: sessionId, toId: peerId, type: "end" }),
+        );
+      }
+      leave(sessionId);
+    };
     window.addEventListener("pagehide", onLeave);
     window.addEventListener("beforeunload", onLeave);
     return () => {
