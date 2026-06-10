@@ -1,79 +1,511 @@
 @import "tailwindcss";
 
+/* ───────────────────────────────────────────────────────────────────────────
+   PULSE — "Living Signal" design system
+   Deep-sea black + bioluminescent cyan & aurora violet. Everything breathes on
+   one synchronized heartbeat; surfaces are thin glass over a drifting aurora;
+   a faint film grain keeps gradients from looking flat/AI-default.
+   ─────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Base */
+  --abyss: #04060f; /* page background */
+  --abyss-2: #070b18;
+  --ink: #e9edf7; /* primary text */
+  --ink-dim: #9aa6c2; /* secondary text */
+  --ink-faint: #65718f; /* tertiary / disabled */
+
+  /* Signal accents */
+  --cyan: #45e9ff; /* primary "signal" */
+  --cyan-deep: #1bb8d4;
+  --violet: #b07bff; /* secondary "aurora" */
+  --magenta: #ff5d9e; /* live / incoming */
+  --amber: #ffcf6b;
+
+  /* Glass */
+  --glass: rgba(10, 16, 30, 0.62);
+  --glass-strong: rgba(8, 13, 26, 0.86);
+  --hairline: rgba(125, 162, 255, 0.14);
+  --hairline-bright: rgba(125, 200, 255, 0.32);
+
+  --shadow-glow: 0 0 0 1px var(--hairline), 0 18px 50px -12px rgba(0, 0, 0, 0.8);
+
+  /* Global heartbeat period — the whole app references this single rhythm. */
+  --beat: 2400ms;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-abyss: var(--abyss);
+  --color-ink: var(--ink);
+  --color-ink-dim: var(--ink-dim);
+  --color-cyan: var(--cyan);
+  --color-violet: var(--violet);
+  --color-magenta: var(--magenta);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--abyss);
+  color: var(--ink);
+  font-family: var(--font-display), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Live user dots on the map */
-.pulse-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 9999px;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  padding: 0;
-  box-shadow: 0 0 0 rgba(255, 255, 255, 0.5);
-  animation: pulse-ring 2s ease-out infinite;
-  transition: transform 0.1s ease;
-}
-
-.pulse-dot:hover {
-  transform: scale(1.3);
-}
-
-/* The user's own "you are here" pin — small, sized like the dots. */
-.pulse-me {
+/* Drifting aurora field behind everything (used on entry / non-map screens). */
+.aurora-field {
   position: relative;
-  font-size: 18px;
-  line-height: 1;
-  cursor: default;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+  isolation: isolate;
+  background-color: var(--abyss);
 }
-
-.pulse-me-label {
+.aurora-field::before {
+  content: "";
   position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 1px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #ffffff;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 0 5px;
-  border-radius: 9999px;
-  white-space: nowrap;
+  inset: -30%;
+  z-index: -2;
+  background:
+    radial-gradient(38% 44% at 22% 28%, rgba(69, 233, 255, 0.18), transparent 70%),
+    radial-gradient(42% 50% at 80% 22%, rgba(176, 123, 255, 0.16), transparent 72%),
+    radial-gradient(48% 52% at 60% 88%, rgba(255, 93, 158, 0.1), transparent 70%);
+  filter: blur(8px);
+  animation: aurora-drift 26s ease-in-out infinite alternate;
+}
+/* Film grain — kills the flat gradient look. */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-@keyframes pulse-ring {
+@keyframes aurora-drift {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
+    transform: translate3d(-2%, -1%, 0) scale(1);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+  }
+}
+
+/* ── Map dots — synchronized sonar heartbeat ──────────────────────────────────
+   Each dot's --phase is set in JS to a negative animation-delay derived from a
+   shared epoch, so every dot on the planet pulses in unison regardless of when
+   it was added to the DOM. */
+.pulse-dot {
+  --dot: var(--cyan);
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #ffffff, var(--dot) 65%);
+  box-shadow:
+    0 0 8px 1px color-mix(in srgb, var(--dot) 70%, transparent),
+    0 0 2px rgba(255, 255, 255, 0.9) inset;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* Two expanding sonar rings, phase-locked to the global beat. */
+.pulse-dot::before,
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid var(--dot);
+  animation: sonar var(--beat) ease-out infinite;
+  animation-delay: var(--phase, 0ms);
+  pointer-events: none;
+}
+.pulse-dot::after {
+  animation-delay: calc(var(--phase, 0ms) + var(--beat) / 2);
+}
+.pulse-dot:hover {
+  transform: scale(1.45);
+  z-index: 5;
+}
+.pulse-dot.is-busy {
+  --dot: var(--ink-faint);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.pulse-dot.is-busy::before,
+.pulse-dot.is-busy::after {
+  display: none;
+}
+
+@keyframes sonar {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(4.2);
+    opacity: 0;
+  }
+}
+
+/* The user's own position — a calm beacon, not a sonar source. */
+.pulse-me {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--magenta) 70%);
+  box-shadow:
+    0 0 14px 2px color-mix(in srgb, var(--magenta) 60%, transparent),
+    0 0 0 4px rgba(255, 93, 158, 0.14);
+  cursor: default;
+}
+.pulse-me::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--magenta);
+  animation: breathe var(--beat) ease-in-out infinite;
+}
+.pulse-me-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgba(4, 6, 15, 0.7);
+  border: 1px solid var(--hairline);
+  padding: 2px 7px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.25;
+  }
+}
+
+/* ── Reusable surface + motion utilities ─────────────────────────────────── */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--hairline);
+  backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow: var(--shadow-glow);
+}
+.glass-strong {
+  background: var(--glass-strong);
+  border: 1px solid var(--hairline);
+  backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: var(--shadow-glow);
+}
+.mono {
+  font-family: var(--font-mono), monospace;
+}
+
+/* Signal-cyan primary button with a sweeping shine. */
+.btn-signal {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--cyan), var(--cyan-deep));
+  color: #04121a;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
+    0 8px 28px -8px rgba(69, 233, 255, 0.6);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.btn-signal:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.25) inset,
+    0 12px 36px -8px rgba(69, 233, 255, 0.75);
+}
+.btn-signal:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-signal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-signal::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+  transform: skewX(-18deg);
+  animation: sheen 4.5s ease-in-out infinite;
+}
+@keyframes sheen {
+  0%,
+  60% {
+    left: -120%;
+  }
+  85%,
+  100% {
+    left: 130%;
+  }
+}
+
+.btn-ghost {
+  border-radius: 9999px;
+  border: 1px solid var(--hairline-bright);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--ink);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--cyan);
+  background: rgba(69, 233, 255, 0.07);
+}
+.btn-danger {
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #ff5d9e, #e23d7b);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 8px 24px -10px rgba(255, 93, 158, 0.7);
+  transition: filter 0.2s ease, transform 0.15s ease;
+}
+.btn-danger:hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+/* Entrance motion */
+.rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-in {
+  animation: fade-in 0.4s ease both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.msg-in {
+  animation: msg-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Entry radar — "scanning for signal" ─────────────────────────────────── */
+.radar {
+  position: relative;
+  width: clamp(220px, 62vw, 300px);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+}
+.radar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(69, 233, 255, 0.18);
+}
+.radar-ring:nth-child(2) {
+  inset: 16%;
+  border-color: rgba(69, 233, 255, 0.13);
+}
+.radar-ring:nth-child(3) {
+  inset: 33%;
+  border-color: rgba(69, 233, 255, 0.1);
+}
+.radar-cross::before,
+.radar-cross::after {
+  content: "";
+  position: absolute;
+  background: rgba(69, 233, 255, 0.1);
+}
+.radar-cross::before {
+  inset: 0 50%;
+  width: 1px;
+}
+.radar-cross::after {
+  inset: 50% 0;
+  height: 1px;
+}
+/* Rotating sweep wedge. */
+.radar-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(69, 233, 255, 0.42),
+    rgba(69, 233, 255, 0.05) 38deg,
+    transparent 64deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(circle, #000 62%, transparent 62%);
+  mask: radial-gradient(circle, #000 62%, transparent 62%);
+  animation: sweep 3.6s linear infinite;
+}
+@keyframes sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Expanding ping released from the center on a slow cadence. */
+.radar-ping {
+  position: absolute;
+  inset: 48%;
+  border-radius: 9999px;
+  border: 1.5px solid var(--cyan);
+  animation: radar-ping 3.6s ease-out infinite;
+}
+@keyframes radar-ping {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.8;
+  }
+  80%,
+  100% {
+    transform: scale(7);
+    opacity: 0;
+  }
+}
+.radar-core {
+  position: absolute;
+  inset: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--cyan) 70%);
+  box-shadow: 0 0 16px 3px rgba(69, 233, 255, 0.7);
+}
+
+/* Gradient wordmark */
+.wordmark {
+  background: linear-gradient(120deg, #ffffff 10%, var(--cyan) 55%, var(--violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 40px rgba(69, 233, 255, 0.25);
+}
+
+/* Live "REC"-style dot */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--magenta);
+  box-shadow: 0 0 8px var(--magenta);
+  animation: blink 1.4s steps(1) infinite;
+}
+@keyframes blink {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  61%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+/* Custom scrollbar */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(125, 162, 255, 0.22);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Hover popup over a stranger's dot — distance + CTA */
+.pulse-popup .mapboxgl-popup-content {
+  background: var(--glass-strong);
+  border: 1px solid var(--hairline-bright);
+  backdrop-filter: blur(12px);
+  border-radius: 10px;
+  padding: 7px 11px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.pulse-popup .mapboxgl-popup-tip {
+  display: none;
+}
+.pulse-popup .pp-dist {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.02em;
+}
+.pulse-popup .pp-cta {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-dim);
+  margin-top: 1px;
+}
+
+/* Mapbox chrome → tuned to the palette */
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-logo {
+  opacity: 0.35;
+  filter: grayscale(0.4);
+}
+
+/* Respect users who don't want motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }
