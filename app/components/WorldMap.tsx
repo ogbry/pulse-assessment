@@ -93,7 +93,10 @@ function spawnArc(map: MapboxMap, a: [number, number], b: [number, number]) {
     const k = Math.min(1, (t - start) / dur);
     try {
       if (!map.getLayer(id)) return;
-      map.setPaintProperty(id, "line-opacity", Math.sin(k * Math.PI) * 0.55);
+      // Clamp to [0, 1] — float rounding can nudge sin() a hair below 0 at the
+      // animation's end, and Mapbox rejects an out-of-range line-opacity.
+      const opacity = Math.max(0, Math.min(1, Math.sin(k * Math.PI) * 0.55));
+      map.setPaintProperty(id, "line-opacity", opacity);
     } catch {
       return;
     }
