@@ -430,11 +430,13 @@ export default function Home() {
             PULSE
           </span>
         </div>
-        <div className="glass mono flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-ink-dim">
-          <span className="live-dot" />
-          <span className="text-cyan">{peers.length}</span>{" "}
-          {peers.length === 1 ? "soul" : "souls"} online
-        </div>
+        {!inChat && (
+          <div className="glass mono flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-ink-dim">
+            <span className="live-dot" />
+            <span className="text-cyan">{peers.length}</span>{" "}
+            {peers.length === 1 ? "soul" : "souls"} online
+          </div>
+        )}
       </div>
 
       {/* Live activity ticker — Global Ripples */}
